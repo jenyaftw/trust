@@ -13,9 +13,9 @@ var Clients = make(map[string]*tls.Conn)
 var Peers = make(map[string]*tls.Conn)
 
 func main() {
-	flags := flags.ParseFlags()
+	flags := flags.ParseServerFlags()
 
-	config, err := utils.GetTLSConfig(flags.Cert, flags.Key, flags.CaFile)
+	config, err := utils.GetTLSConfig(flags.Cert, flags.Key, &flags.CaFile)
 	if err != nil {
 		log.Println(err)
 		return

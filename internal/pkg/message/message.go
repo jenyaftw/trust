@@ -13,12 +13,15 @@ type Message struct {
 }
 
 const (
-	PEER_ID             uint8 = 0
-	CLIENT_ID           uint8 = 1
-	DATA                uint8 = 2
-	CLIENT_NON_EXISTENT uint8 = 3
-	PING                uint8 = 4
-	PONG                uint8 = 5
+	PEER_ID              uint8 = 0
+	REGISTER_CLIENT      uint8 = 1
+	REGISTER_CLIENT_RESP uint8 = 2
+	DATA                 uint8 = 3
+	CLIENT_NON_EXISTENT  uint8 = 4
+	PING                 uint8 = 5
+	PONG                 uint8 = 6
+	GET_CLIENT_CERT      uint8 = 7
+	GET_CLIENT_CERT_RESP uint8 = 8
 )
 
 func MessageFromBytes(input []byte) (*Message, error) {

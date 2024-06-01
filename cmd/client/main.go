@@ -1,41 +1,64 @@
 package main
 
 import (
-	"crypto/tls"
-	"flag"
+	"bufio"
 	"fmt"
 	"log"
-)
+	"os"
 
-const (
-	HOST = "127.0.0.1"
-	PORT = "8736"
+	"github.com/jenyaftw/trust/internal/app"
+	"github.com/jenyaftw/trust/internal/pkg/flags"
 )
 
 func main() {
-	host := flag.String("host", HOST, "Server host")
-	port := flag.String("port", PORT, "Server port")
+	flags := flags.ParseClientFlags()
 
-	cert := flag.String("cert", "certs/client-cert.pem", "Client certificate")
-	key := flag.String("key", "certs/client-key.pem", "Client key")
-
-	if *cert == "" || *key == "" {
-		log.Fatal("Client certificate and key are required")
-	}
-
-	flag.Parse()
-
-	cer, err := tls.LoadX509KeyPair(*cert, *key)
+	client, err := app.NewTrustClient(flags)
 	if err != nil {
 		log.Println(err)
 		return
 	}
 
-	config := &tls.Config{Certificates: []tls.Certificate{cer}}
-	conn, err := tls.Dial("tcp", fmt.Sprintf("%s:%s", *host, *port), config)
+	err = client.Connect()
 	if err != nil {
 		log.Println(err)
 		return
 	}
-	defer conn.Close()
+
+	fmt.Println("Connected to server")
+	for {
+		fmt.Print("Select message type (1 - text): ")
+		var msg int
+		_, err := fmt.Scanf("%d\n", &msg)
+		if err != nil {
+			log.Println(err)
+			return
+		}
+
+		if msg != 1 {
+			fmt.Println("Invalid message type")
+			continue
+		}
+
+		fmt.Print("Enter destination ID: ")
+		var dest uint64
+		_, err = fmt.Scanf("%d\n", &dest)
+		if err != nil {
+			log.Println(err)
+			return
+		}
+
+		switch msg {
+		case 1:
+			reader := bufio.NewReader(os.Stdin)
+			fmt.Print("Enter text: ")
+			text, _ := reader.ReadString('\n')
+
+			err = client.Send([]byte(text), dest)
+			if err != nil {
+				log.Println(err)
+				return
+			}
+		}
+	}
 }
