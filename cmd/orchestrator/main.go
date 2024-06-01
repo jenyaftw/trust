@@ -40,6 +40,10 @@ func (n *Node) String() string {
 	return fmt.Sprintf("%d", n.ID)
 }
 
+func (n *Node) FillDeBruijn() {
+	// TODO: Fill Debuijn graph
+}
+
 func main() {
 	nodes := flag.Int("n", 16, "Number of nodes to start")
 	flag.Parse()
