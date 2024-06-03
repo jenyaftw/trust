@@ -6,42 +6,40 @@ import (
 	"crypto/sha512"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/base64"
 	"math"
 	"math/big"
-	"os"
 )
 
-func GetX509Certificate(certPath string, keyPath string) (tls.Certificate, error) {
-	return tls.LoadX509KeyPair(certPath, keyPath)
-}
-
-func GetCAPool(caPath string) (*x509.CertPool, error) {
-	caCert, err := os.ReadFile(caPath)
+func GetTLSConfig(certEnc string, keyEnc string, caEnc *string) (*tls.Config, error) {
+	certString, err := base64.StdEncoding.DecodeString(certEnc)
 	if err != nil {
 		return nil, err
 	}
 
-	caCertPool := x509.NewCertPool()
-	caCertPool.AppendCertsFromPEM(caCert)
-	return caCertPool, nil
-}
+	keyString, err := base64.StdEncoding.DecodeString(keyEnc)
+	if err != nil {
+		return nil, err
+	}
 
-func GetTLSConfig(certPath string, keyPath string, caPath *string) (*tls.Config, error) {
-	cer, err := GetX509Certificate(certPath, keyPath)
+	cer, err := tls.X509KeyPair(certString, keyString)
 	if err != nil {
 		return nil, err
 	}
 
 	config := tls.Config{
 		Certificates:       []tls.Certificate{cer},
-		InsecureSkipVerify: caPath == nil,
+		InsecureSkipVerify: caEnc == nil,
 	}
 
-	if caPath != nil {
-		caCertPool, err := GetCAPool(*caPath)
+	if caEnc != nil {
+		caString, err := base64.StdEncoding.DecodeString(*caEnc)
 		if err != nil {
 			return nil, err
 		}
+
+		caCertPool := x509.NewCertPool()
+		caCertPool.AppendCertsFromPEM(caString)
 
 		config.RootCAs = caCertPool
 		config.ClientCAs = caCertPool

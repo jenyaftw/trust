@@ -6,12 +6,12 @@ import (
 )
 
 type ServerFlags struct {
-	Host   string
-	Port   string
-	Cert   string
-	Key    string
-	CaFile string
-	Peers  string
+	Host  string
+	Port  string
+	Cert  string
+	Key   string
+	Ca    string
+	Peers string
 }
 
 type ClientFlags struct {
@@ -31,26 +31,21 @@ func ParseServerFlags() *ServerFlags {
 	host := flag.String("host", HOST, "Listening host")
 	port := flag.String("port", PORT, "Listening port")
 
-	cert := flag.String("cert", "certs/server-1.crt", "Certificate")
-	key := flag.String("key", "certs/server-1.key", "Key")
-
-	caFile := flag.String("cacert", "certs/ca.crt", "CA certificate")
+	cert := flag.String("cert", "", "Certificate in Base64")
+	key := flag.String("key", "", "Key in Base64")
+	ca := flag.String("ca", "", "CA certificate in Base64")
 
 	peers := flag.String("peers", PEERS, "Peers")
-
-	if *cert == "" || *key == "" {
-		log.Fatal("Certificate and key are required")
-	}
 
 	flag.Parse()
 
 	return &ServerFlags{
-		Host:   *host,
-		Port:   *port,
-		Cert:   *cert,
-		Key:    *key,
-		CaFile: *caFile,
-		Peers:  *peers,
+		Host:  *host,
+		Port:  *port,
+		Cert:  *cert,
+		Key:   *key,
+		Ca:    *ca,
+		Peers: *peers,
 	}
 }
 
