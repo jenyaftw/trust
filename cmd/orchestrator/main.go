@@ -8,9 +8,9 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
+	"os"
 	"os/exec"
 	"strings"
-	"time"
 
 	"github.com/jenyaftw/trust/internal/pkg/crypto"
 )
@@ -218,7 +218,9 @@ func launchNode(id int, serial int, first *Node, second *Node, caCert *x509.Cert
 	peersString := strings.Join(peers, ",")
 
 	node.Status = 2
-	cmd := exec.Command("./bin/server.exe", "-cert", certStr, "-key", keyStr, "-ca", caCertStr, "-port", fmt.Sprint(node.Port), "-host", node.IP, "-peers", peersString, "-id", fmt.Sprint(id), "-timeout", fmt.Sprint(timeout))
+	cmd := exec.Command("go", "run", "cmd/server/main.go", "-cert", certStr, "-key", keyStr, "-ca", caCertStr, "-port", fmt.Sprint(node.Port), "-host", node.IP, "-peers", peersString, "-id", fmt.Sprint(id), "-timeout", fmt.Sprint(timeout))
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
 		node.Status = 0
 		launchNode(id, serial, first, second, caCert, caKey, caCertStr, timeout)
@@ -275,56 +277,59 @@ func main() {
 	go startNodes(*minPort, &firstTree, &secondTree, *timeout)
 
 	for {
-		fmt.Print("\033[H\033[2J")
-		fmt.Println("Розподілена система захищеного обміну даними")
-		fmt.Printf("Загальна кількість вузлів: %d\n\n", *nodes)
-
-		firstLines := strings.Split(firstTree.PrintToString(), "\n")
-		secondLines := strings.Split(secondTree.PrintToString(), "\n")
-
-		maxLen := 0
-		for _, line := range firstLines {
-			if len(line) > maxLen {
-				maxLen = len(line)
-			}
-		}
-
-		for i := 0; i < len(firstLines) || i < len(secondLines); i++ {
-			if i < len(firstLines) {
-				fmt.Printf("%-*s", maxLen, firstLines[i])
-			} else {
-				fmt.Printf("%-*s", maxLen, "")
-			}
-			if i < len(secondLines) {
-				fmt.Print(secondLines[i])
-			}
-			fmt.Println()
-		}
-
-		live := 0
-		starting := 0
-		dead := 0
-
-		for i := 0; i < len(Nodes); i++ {
-			node := Nodes[i]
-			if node.Status == 0 {
-				dead++
-			} else if node.Status == 1 {
-				starting++
-			} else {
-				live++
-			}
-		}
-
-		fmt.Print("\nЖивий: ")
-		fmt.Printf("%s%d%s • ", Green, live, Reset)
-		fmt.Print("Запускається: ")
-		fmt.Printf("%s%d%s • ", Yellow, starting, Reset)
-		fmt.Print("Лежить: ")
-		fmt.Printf("%s%d%s\n", Red, dead, Reset)
-		fmt.Printf("Порти: %d-%d\n", *minPort, *minPort+*nodes-1)
-		fmt.Print("Команди: C - згенерувати клієнтський сертифікат\n")
-
-		time.Sleep(time.Millisecond * 1000)
 	}
+
+	// for {
+	// 	fmt.Print("\033[H\033[2J")
+	// 	fmt.Println("Розподілена система захищеного обміну даними")
+	// 	fmt.Printf("Загальна кількість вузлів: %d\n\n", *nodes)
+
+	// 	firstLines := strings.Split(firstTree.PrintToString(), "\n")
+	// 	secondLines := strings.Split(secondTree.PrintToString(), "\n")
+
+	// 	maxLen := 0
+	// 	for _, line := range firstLines {
+	// 		if len(line) > maxLen {
+	// 			maxLen = len(line)
+	// 		}
+	// 	}
+
+	// 	for i := 0; i < len(firstLines) || i < len(secondLines); i++ {
+	// 		if i < len(firstLines) {
+	// 			fmt.Printf("%-*s", maxLen, firstLines[i])
+	// 		} else {
+	// 			fmt.Printf("%-*s", maxLen, "")
+	// 		}
+	// 		if i < len(secondLines) {
+	// 			fmt.Print(secondLines[i])
+	// 		}
+	// 		fmt.Println()
+	// 	}
+
+	// 	live := 0
+	// 	starting := 0
+	// 	dead := 0
+
+	// 	for i := 0; i < len(Nodes); i++ {
+	// 		node := Nodes[i]
+	// 		if node.Status == 0 {
+	// 			dead++
+	// 		} else if node.Status == 1 {
+	// 			starting++
+	// 		} else {
+	// 			live++
+	// 		}
+	// 	}
+
+	// 	fmt.Print("\nЖивий: ")
+	// 	fmt.Printf("%s%d%s • ", Green, live, Reset)
+	// 	fmt.Print("Запускається: ")
+	// 	fmt.Printf("%s%d%s • ", Yellow, starting, Reset)
+	// 	fmt.Print("Лежить: ")
+	// 	fmt.Printf("%s%d%s\n", Red, dead, Reset)
+	// 	fmt.Printf("Порти: %d-%d\n", *minPort, *minPort+*nodes-1)
+	// 	fmt.Print("Команди: C - згенерувати клієнтський сертифікат\n")
+
+	// 	time.Sleep(time.Millisecond * 1000)
+	// }
 }
