@@ -5,18 +5,19 @@ import (
 	"fmt"
 	"log"
 	"strings"
+	"time"
 
 	"github.com/jenyaftw/trust/internal/pkg/flags"
 	"github.com/jenyaftw/trust/internal/pkg/message"
 	"github.com/jenyaftw/trust/internal/pkg/utils"
 )
 
-var serverId uint64
+var serverId int
 var clients = make(map[uint64]*tls.Conn)
 var peers = make(map[uint64]*tls.Conn)
 
 func ListenServer(flags *flags.ServerFlags, config *tls.Config) {
-	serverId = utils.GenerateRandomId()
+	serverId = flags.NodeId
 	fmt.Println("Current server ID:", serverId)
 
 	ln, err := tls.Listen("tcp", fmt.Sprintf("%s:%s", flags.Host, flags.Port), config)
@@ -25,6 +26,8 @@ func ListenServer(flags *flags.ServerFlags, config *tls.Config) {
 		return
 	}
 	defer ln.Close()
+
+	time.Sleep(time.Duration(flags.Timeout * 1_000_000))
 
 	peers := strings.Split(flags.Peers, ",")
 	for _, peer := range peers {
@@ -46,7 +49,7 @@ func ListenServer(flags *flags.ServerFlags, config *tls.Config) {
 func joinPeer(peer string, config *tls.Config) {
 	conn, err := tls.Dial("tcp", peer, config)
 	if err != nil {
-		log.Println(err)
+		log.Fatal(err)
 		return
 	}
 
@@ -58,7 +61,7 @@ func handleConnection(conn *tls.Conn) {
 
 	msg := &message.Message{
 		Type: message.PEER_ID,
-		From: serverId,
+		From: uint64(serverId),
 	}
 	msg.Send(conn)
 
@@ -84,7 +87,7 @@ func handleConnection(conn *tls.Conn) {
 			fmt.Println("Received ping")
 			msg := &message.Message{
 				Type: message.PONG,
-				From: serverId,
+				From: uint64(serverId),
 			}
 			msg.Send(conn)
 		case message.PONG:
@@ -95,7 +98,7 @@ func handleConnection(conn *tls.Conn) {
 			clients[clientId] = conn
 			msg := &message.Message{
 				Type: message.REGISTER_CLIENT_RESP,
-				From: serverId,
+				From: uint64(serverId),
 				To:   clientId,
 			}
 			msg.Send(conn)

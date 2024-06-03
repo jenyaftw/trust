@@ -4,8 +4,10 @@ import (
 	"crypto/rsa"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/base64"
 	"fmt"
 	"log"
+	"os"
 	"time"
 
 	"github.com/jenyaftw/trust/internal/pkg/flags"
@@ -23,7 +25,20 @@ type TrustClient struct {
 }
 
 func NewTrustClient(flags *flags.ClientFlags) (*TrustClient, error) {
-	config, err := utils.GetTLSConfig(flags.Cert, flags.Key, nil)
+	certContent, err := os.ReadFile(flags.Cert)
+	if err != nil {
+		fmt.Print(err)
+	}
+
+	keyContent, err := os.ReadFile(flags.Key)
+	if err != nil {
+		fmt.Print(err)
+	}
+
+	certEnc := base64.StdEncoding.EncodeToString(certContent)
+	keyEnc := base64.StdEncoding.EncodeToString(keyContent)
+
+	config, err := utils.GetTLSConfig(certEnc, keyEnc, nil)
 	if err != nil {
 		return nil, err
 	}
