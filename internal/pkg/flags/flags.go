@@ -6,14 +6,15 @@ import (
 )
 
 type ServerFlags struct {
-	NodeId  int
-	Host    string
-	Port    string
-	Cert    string
-	Key     string
-	Ca      string
-	Timeout int
-	Peers   string
+	NodeId    int
+	NodeCount int
+	Host      string
+	Port      string
+	Cert      string
+	Key       string
+	Ca        string
+	Timeout   int
+	Peers     string
 }
 
 type ClientFlags struct {
@@ -40,18 +41,20 @@ func ParseServerFlags() *ServerFlags {
 	timeout := flag.Int("timeout", 5000, "Timeout for connection")
 
 	peers := flag.String("peers", PEERS, "Peers")
+	nodes := flag.Int("nodes", 0, "Number of nodes")
 
 	flag.Parse()
 
 	return &ServerFlags{
-		Host:    *host,
-		Port:    *port,
-		Cert:    *cert,
-		Key:     *key,
-		Ca:      *ca,
-		Peers:   *peers,
-		NodeId:  *nodeId,
-		Timeout: *timeout,
+		Host:      *host,
+		Port:      *port,
+		Cert:      *cert,
+		Key:       *key,
+		Ca:        *ca,
+		Peers:     *peers,
+		NodeId:    *nodeId,
+		NodeCount: *nodes,
+		Timeout:   *timeout,
 	}
 }
 

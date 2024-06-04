@@ -7,9 +7,12 @@ import (
 )
 
 type Message struct {
-	Type     uint8
-	From, To uint64
-	Content  []byte
+	Type             uint8
+	From, To         uint64
+	Intermediate     int64
+	FromNode, ToNode uint64
+	AlreadyBeen      []uint64
+	Content          []byte
 }
 
 const (
@@ -22,6 +25,7 @@ const (
 	PONG                 uint8 = 6
 	GET_CLIENT_CERT      uint8 = 7
 	GET_CLIENT_CERT_RESP uint8 = 8
+	I_HAVE_CLIENT        uint8 = 9
 )
 
 func MessageFromBytes(input []byte) (*Message, error) {

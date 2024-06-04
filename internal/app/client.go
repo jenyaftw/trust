@@ -65,12 +65,14 @@ func (c *TrustClient) Send(bytes []byte, dest uint64) error {
 	cert := c.certs[dest]
 	if cert == nil {
 		msg := &message.Message{
-			Type:    message.GET_CLIENT_CERT,
-			Content: c.config.Certificates[0].Certificate[0],
-			From:    c.clientId,
-			To:      dest,
+			Type:         message.GET_CLIENT_CERT,
+			Content:      c.config.Certificates[0].Certificate[0],
+			From:         c.clientId,
+			To:           dest,
+			Intermediate: -1,
 		}
 
+		fmt.Println("Requesting client cert from", dest)
 		err := msg.Send(c.conn)
 		if err != nil {
 			return err
@@ -113,7 +115,7 @@ func (c *TrustClient) handleConnection(v chan uint64) {
 	defer c.Close()
 
 	for {
-		buf := make([]byte, 1024)
+		buf := make([]byte, 4096)
 		n, err := c.conn.Read(buf)
 		if err != nil {
 			log.Println(n, err)
@@ -126,6 +128,7 @@ func (c *TrustClient) handleConnection(v chan uint64) {
 			return
 		}
 
+		fmt.Println("Received message:", msg.Type, "from", msg.From, "to", msg.To)
 		switch msg.Type {
 		case message.PEER_ID:
 			fmt.Println("Received peer ID:", msg.From)
