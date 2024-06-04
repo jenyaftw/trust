@@ -109,6 +109,10 @@ func processMessageRelay(msg *message.Message, nodeCount int) uint64 {
 		fmt.Println()
 	}
 
+	if shiftFrom == uint64(serverId) {
+		return processMessageRelay(msg, nodeCount)
+	}
+
 	return shiftFrom
 }
 
@@ -177,6 +181,10 @@ func handleConnection(conn *tls.Conn, nodeCount int) {
 				}
 			}
 		case message.I_HAVE_CLIENT:
+			if _, ok := clientNode[msg.To]; ok {
+				continue
+			}
+
 			fmt.Printf("I'm %d, I know that %d has client %d\n", serverId, msg.From, msg.To)
 			clientNode[msg.To] = msg.From
 
@@ -209,6 +217,21 @@ func handleConnection(conn *tls.Conn, nodeCount int) {
 			clientConn.Write(buf[:n])
 		case message.DATA:
 			fmt.Println("Received message data")
+			clientConn, ok := clients[msg.To]
+			if !ok {
+				nextNode := processMessageRelay(msg, nodeCount)
+
+				peer := peers[nextNode]
+				fmt.Println("Relaying to:", nextNode)
+				if err := msg.Send(peer); err != nil {
+					log.Println(err)
+				}
+
+				continue
+			}
+			clientConn.Write(buf[:n])
+		case message.AES_KEY:
+			fmt.Println("Received AES key")
 			clientConn, ok := clients[msg.To]
 			if !ok {
 				nextNode := processMessageRelay(msg, nodeCount)

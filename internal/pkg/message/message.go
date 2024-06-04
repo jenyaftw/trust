@@ -26,6 +26,7 @@ const (
 	GET_CLIENT_CERT      uint8 = 7
 	GET_CLIENT_CERT_RESP uint8 = 8
 	I_HAVE_CLIENT        uint8 = 9
+	AES_KEY              uint8 = 10
 )
 
 func MessageFromBytes(input []byte) (*Message, error) {

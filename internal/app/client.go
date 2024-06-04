@@ -10,9 +10,9 @@ import (
 	"os"
 	"time"
 
+	"github.com/jenyaftw/trust/internal/pkg/crypto"
 	"github.com/jenyaftw/trust/internal/pkg/flags"
 	"github.com/jenyaftw/trust/internal/pkg/message"
-	"github.com/jenyaftw/trust/internal/pkg/utils"
 )
 
 type TrustClient struct {
@@ -22,6 +22,7 @@ type TrustClient struct {
 	clientId uint64
 	serverId uint64
 	certs    map[uint64]*x509.Certificate
+	keys     map[uint64][]byte
 }
 
 func NewTrustClient(flags *flags.ClientFlags) (*TrustClient, error) {
@@ -38,12 +39,12 @@ func NewTrustClient(flags *flags.ClientFlags) (*TrustClient, error) {
 	certEnc := base64.StdEncoding.EncodeToString(certContent)
 	keyEnc := base64.StdEncoding.EncodeToString(keyContent)
 
-	config, err := utils.GetTLSConfig(certEnc, keyEnc, nil)
+	config, err := crypto.GetTLSConfig(certEnc, keyEnc, nil)
 	if err != nil {
 		return nil, err
 	}
 
-	return &TrustClient{config: config, flags: flags, certs: make(map[uint64]*x509.Certificate)}, nil
+	return &TrustClient{config: config, flags: flags, certs: make(map[uint64]*x509.Certificate), keys: make(map[uint64][]byte)}, nil
 }
 
 func (c *TrustClient) Connect() error {
@@ -63,6 +64,7 @@ func (c *TrustClient) Connect() error {
 
 func (c *TrustClient) Send(bytes []byte, dest uint64) error {
 	cert := c.certs[dest]
+	key := c.keys[dest]
 	if cert == nil {
 		msg := &message.Message{
 			Type:         message.GET_CLIENT_CERT,
@@ -90,9 +92,30 @@ func (c *TrustClient) Send(bytes []byte, dest uint64) error {
 			time.Sleep(1000 * time.Millisecond)
 		}
 		cert = c.certs[dest]
+
+		key = crypto.GenerateAESKey()
+		c.keys[dest] = key
+		aseKeyEncrypted, err := crypto.EncryptMessage(key, cert)
+		if err != nil {
+			return err
+		}
+
+		msg = &message.Message{
+			Type:         message.AES_KEY,
+			Content:      aseKeyEncrypted,
+			From:         c.clientId,
+			To:           dest,
+			Intermediate: -1,
+		}
+
+		fmt.Println("Sending AES key to", dest)
+		err = msg.Send(c.conn)
+		if err != nil {
+			return err
+		}
 	}
 
-	encrypted, err := utils.EncryptMessage(bytes, cert)
+	encrypted, err := crypto.EncryptMessageAES(bytes, key)
 	if err != nil {
 		return err
 	}
@@ -164,11 +187,19 @@ func (c *TrustClient) handleConnection(v chan uint64) {
 				fmt.Println(err)
 				continue
 			}
+
 			c.certs[msg.From] = cert
-		case message.DATA:
+		case message.AES_KEY:
 			key := c.config.Certificates[0].PrivateKey.(*rsa.PrivateKey)
 			key.Precompute()
-			decrypted, err := utils.DecryptMessage(msg.Content, key)
+			aesKey, err := crypto.DecryptMessage(msg.Content, key)
+			if err != nil {
+				fmt.Println(err)
+				continue
+			}
+			c.keys[msg.From] = aesKey
+		case message.DATA:
+			decrypted, err := crypto.DecryptMessageAES(msg.Content, c.keys[msg.From])
 			if err != nil {
 				fmt.Println(err)
 				continue
