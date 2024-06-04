@@ -75,6 +75,43 @@ func joinPeer(peer string, config *tls.Config, nodeCount int) {
 	go handleConnection(conn, nodeCount)
 }
 
+func processMessageRelay(msg *message.Message, nodeCount int) uint64 {
+	node := clientNode[msg.To]
+	msg.FromNode = uint64(serverId)
+	msg.ToNode = node
+
+	bitCount := utils.GetBitCount(nodeCount - 1)
+	allMask, _, _ := utils.GetMasks(bitCount)
+	fmt.Println("All mask:", strconv.FormatInt(int64(allMask), 2))
+	fmt.Println("From node:", strconv.FormatInt(int64(msg.FromNode), 2), "=", msg.FromNode)
+	fmt.Println("To node:", strconv.FormatInt(int64(msg.ToNode), 2), "=", msg.ToNode)
+	fmt.Println("Intermediate:", strconv.FormatInt(int64(msg.Intermediate), 2), "=", msg.Intermediate)
+	if msg.Intermediate == -1 {
+		msg.Intermediate = int64(msg.ToNode)
+	}
+	fmt.Println("Intermediate:", strconv.FormatInt(int64(msg.Intermediate), 2), "=", msg.Intermediate)
+
+	shiftFrom := (uint64(serverId) << 1) & uint64(allMask)
+	fmt.Println("Shift from:", strconv.FormatInt(int64(shiftFrom), 2), "=", shiftFrom)
+
+	if msg.Intermediate != 0 {
+		firstBit := utils.GetFirstBit(int(msg.Intermediate), nodeCount-1)
+		fmt.Println("First bit:", strconv.FormatInt(int64(firstBit), 2), "=", firstBit)
+
+		if firstBit == 1 {
+			shiftFrom |= 1
+		}
+		fmt.Println("New shift from (next node):", strconv.FormatInt(int64(shiftFrom), 2), "=", shiftFrom)
+
+		newIntermediate := (uint64(msg.Intermediate) << 1) & uint64(allMask)
+		msg.Intermediate = int64(newIntermediate)
+		fmt.Println("New intermediate:", strconv.FormatInt(int64(newIntermediate), 2), "=", newIntermediate)
+		fmt.Println()
+	}
+
+	return shiftFrom
+}
+
 func handleConnection(conn *tls.Conn, nodeCount int) {
 	defer conn.Close()
 
@@ -159,40 +196,10 @@ func handleConnection(conn *tls.Conn, nodeCount int) {
 			fmt.Println("Received request for client certificate")
 			clientConn, ok := clients[msg.To]
 			if !ok {
-				node := clientNode[msg.To]
-				msg.FromNode = uint64(serverId)
-				msg.ToNode = node
+				nextNode := processMessageRelay(msg, nodeCount)
 
-				bitCount := utils.GetBitCount(nodeCount - 1)
-				allMask, _, _ := utils.GetMasks(bitCount)
-				fmt.Println("All mask:", strconv.FormatInt(int64(allMask), 2))
-				fmt.Println("From node:", strconv.FormatInt(int64(msg.FromNode), 2), "=", msg.FromNode)
-				fmt.Println("To node:", strconv.FormatInt(int64(msg.ToNode), 2), "=", msg.ToNode)
-				fmt.Println("Intermediate:", strconv.FormatInt(int64(msg.Intermediate), 2), "=", msg.Intermediate)
-				if msg.Intermediate == -1 {
-					msg.Intermediate = int64(msg.ToNode)
-				}
-				fmt.Println("Intermediate:", strconv.FormatInt(int64(msg.Intermediate), 2), "=", msg.Intermediate)
-
-				shiftFrom := (uint64(serverId) << 1) & uint64(allMask)
-				fmt.Println("Shift from:", strconv.FormatInt(int64(shiftFrom), 2), "=", shiftFrom)
-
-				if msg.Intermediate != 0 {
-					firstBit := utils.GetFirstBit(int(msg.Intermediate))
-					fmt.Println("First bit:", strconv.FormatInt(int64(firstBit), 2), "=", firstBit)
-
-					if firstBit == 1 {
-						shiftFrom |= 1
-					}
-					fmt.Println("New shift from (next node):", strconv.FormatInt(int64(shiftFrom), 2), "=", shiftFrom)
-
-					newIntermediate := (uint64(msg.Intermediate) << 1) & uint64(allMask)
-					msg.Intermediate = int64(newIntermediate)
-					fmt.Println("New intermediate:", strconv.FormatInt(int64(newIntermediate), 2), "=", newIntermediate)
-					fmt.Println()
-				}
-
-				peer := peers[shiftFrom]
+				peer := peers[nextNode]
+				fmt.Println("Relaying to:", nextNode)
 				if err := msg.Send(peer); err != nil {
 					log.Println(err)
 				}
@@ -204,50 +211,32 @@ func handleConnection(conn *tls.Conn, nodeCount int) {
 			fmt.Println("Received message data")
 			clientConn, ok := clients[msg.To]
 			if !ok {
-				fmt.Println("We don't have the client, let's ask peers")
-				message, err := message.MessageFromBytes(buf[:n])
-				if err != nil {
+				nextNode := processMessageRelay(msg, nodeCount)
+
+				peer := peers[nextNode]
+				fmt.Println("Relaying to:", nextNode)
+				if err := msg.Send(peer); err != nil {
 					log.Println(err)
 				}
 
-				message.AlreadyBeen = append(message.AlreadyBeen, uint64(serverId))
-				bytes, err := message.Bytes()
-				if err != nil {
-					log.Println(err)
-				}
-
-				for id, peer := range peers {
-					if !slices.Contains(message.AlreadyBeen, id) {
-						peer.Write(bytes)
-					}
-				}
 				continue
 			}
 			clientConn.Write(buf[:n])
 		case message.GET_CLIENT_CERT_RESP:
 			fmt.Println("Received request for client certificate response")
-			// clientConn, ok := clients[msg.To]
-			// if !ok {
-			// 	fmt.Println("We don't have the client, let's ask peers")
-			// 	message, err := message.MessageFromBytes(buf[:n])
-			// 	if err != nil {
-			// 		log.Println(err)
-			// 	}
+			clientConn, ok := clients[msg.To]
+			if !ok {
+				nextNode := processMessageRelay(msg, nodeCount)
 
-			// 	message.AlreadyBeen = append(message.AlreadyBeen, uint64(serverId))
-			// 	bytes, err := message.Bytes()
-			// 	if err != nil {
-			// 		log.Println(err)
-			// 	}
+				peer := peers[nextNode]
+				fmt.Println("Relaying to:", nextNode)
+				if err := msg.Send(peer); err != nil {
+					log.Println(err)
+				}
 
-			// 	for id, peer := range peers {
-			// 		if !slices.Contains(message.AlreadyBeen, id) {
-			// 			peer.Write(bytes)
-			// 		}
-			// 	}
-			// 	continue
-			// }
-			// clientConn.Write(buf[:n])
+				continue
+			}
+			clientConn.Write(buf[:n])
 		}
 	}
 }

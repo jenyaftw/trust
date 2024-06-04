@@ -89,8 +89,12 @@ func GetLastBit(n int) int {
 	return n
 }
 
-func GetFirstBit(n int) int {
+func GetFirstBit(n, max int) int {
 	bitCount := GetBitCount(n)
+	maxBitCount := GetBitCount(max)
+	if maxBitCount > bitCount {
+		return 0
+	}
 	return (n & (1 << (bitCount - 1))) >> (bitCount - 1)
 }
 

@@ -98,10 +98,11 @@ func (c *TrustClient) Send(bytes []byte, dest uint64) error {
 	}
 
 	msg := &message.Message{
-		Type:    message.DATA,
-		Content: encrypted,
-		From:    c.clientId,
-		To:      dest,
+		Type:         message.DATA,
+		Content:      encrypted,
+		From:         c.clientId,
+		To:           dest,
+		Intermediate: -1,
 	}
 
 	return msg.Send(c.conn)
@@ -150,10 +151,11 @@ func (c *TrustClient) handleConnection(v chan uint64) {
 			c.certs[msg.From] = cert
 
 			msg := &message.Message{
-				Type:    message.GET_CLIENT_CERT_RESP,
-				Content: c.config.Certificates[0].Certificate[0],
-				From:    c.clientId,
-				To:      msg.From,
+				Type:         message.GET_CLIENT_CERT_RESP,
+				Content:      c.config.Certificates[0].Certificate[0],
+				From:         c.clientId,
+				To:           msg.From,
+				Intermediate: -1,
 			}
 			msg.Send(c.conn)
 		case message.GET_CLIENT_CERT_RESP:
