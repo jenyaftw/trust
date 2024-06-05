@@ -1,9 +1,11 @@
 package structs
 
 import (
+	"crypto/sha256"
 	"crypto/x509"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/jenyaftw/trust/internal/pkg/utils"
 )
@@ -123,18 +125,71 @@ func (n *TreeNode) FindNode(id int) *TreeNode {
 	return nil
 }
 
-type Graph struct {
-	nodes map[int][]int
+type Block struct {
+	ID         int
+	Timestamp  int64
+	MerkleRoot []byte
+	Data       []byte
+	Hash       []byte
+	PrevHash   []byte
 }
 
-func (g *Graph) AddNode(node int) {
-	if g.nodes == nil {
-		g.nodes = make(map[int][]int)
+func (b *Block) CalculateHash() []byte {
+	record := fmt.Sprint(b.ID) + fmt.Sprint(b.Timestamp) + string(b.Data) + string(b.PrevHash)
+	hash := sha256.New()
+	// hash.Write(b.Data)
+	// hash.Write(b.PrevHash)
+	// hash.Write([]byte(string(b.ID)))
+	// hash.Write([]byte(string(b.Timestamp)))
+	hash.Write([]byte(record))
+	return hash.Sum(nil)
+}
+
+type Blockchain struct {
+	Blocks []*Block
+}
+
+func NewBlockchain() *Blockchain {
+	genesisBlock := &Block{
+		ID:        0,
+		Timestamp: time.Now().Unix(),
+		Data:      []byte("Genesis block"),
+		PrevHash:  nil,
 	}
-	g.nodes[node] = []int{}
+
+	genesisHash := genesisBlock.CalculateHash()
+	genesisBlock.Hash = genesisHash
+
+	return &Blockchain{
+		Blocks: []*Block{genesisBlock},
+	}
 }
 
-func (g *Graph) AddEdge(node1, node2 int) {
-	g.nodes[node1] = append(g.nodes[node1], node2)
-	g.nodes[node2] = append(g.nodes[node2], node1)
+func (bc *Blockchain) AddBlock(data []byte) {
+	prevBlock := bc.Blocks[len(bc.Blocks)-1]
+	newBlock := &Block{
+		ID:        prevBlock.ID + 1,
+		Timestamp: time.Now().Unix(),
+		Data:      data,
+		PrevHash:  prevBlock.Hash,
+	}
+
+	newBlock.Hash = newBlock.CalculateHash()
+	bc.Blocks = append(bc.Blocks, newBlock)
+}
+
+func (bc *Blockchain) Validate() bool {
+	for i := 1; i < len(bc.Blocks); i++ {
+		currentBlock := bc.Blocks[i]
+		prevBlock := bc.Blocks[i-1]
+
+		if string(currentBlock.PrevHash) != string(prevBlock.Hash) {
+			return false
+		}
+
+		if string(currentBlock.Hash) != string(currentBlock.CalculateHash()) {
+			return false
+		}
+	}
+	return true
 }

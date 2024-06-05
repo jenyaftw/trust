@@ -11,7 +11,6 @@ import (
 
 	"github.com/jenyaftw/trust/internal/pkg/flags"
 	"github.com/jenyaftw/trust/internal/pkg/message"
-	"github.com/jenyaftw/trust/internal/pkg/structs"
 	"github.com/jenyaftw/trust/internal/pkg/utils"
 )
 
@@ -19,7 +18,6 @@ var serverId int
 var clients = make(map[uint64]*tls.Conn)
 var peers = make(map[uint64]*tls.Conn)
 var clientNode = make(map[uint64]uint64)
-var networkGraph = structs.Graph{}
 
 func ListenServer(flags *flags.ServerFlags, config *tls.Config) {
 	serverId = flags.NodeId
@@ -39,20 +37,6 @@ func ListenServer(flags *flags.ServerFlags, config *tls.Config) {
 		if peer != "" {
 			go joinPeer(peer, config, flags.NodeCount)
 		}
-	}
-
-	for i := 0; i < flags.NodeCount; i++ {
-		allMask, lastMask, firstMask := utils.GetMasks(utils.GetBitCount(flags.NodeCount - 1))
-		first := (i >> 1) & allMask
-		second := first | firstMask
-		third := (i << 1) & allMask
-		fourth := third | lastMask
-
-		networkGraph.AddNode(i)
-		networkGraph.AddEdge(i, first)
-		networkGraph.AddEdge(i, second)
-		networkGraph.AddEdge(i, third)
-		networkGraph.AddEdge(i, fourth)
 	}
 
 	for {
