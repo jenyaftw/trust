@@ -3,7 +3,9 @@ package message
 import (
 	"bytes"
 	"crypto/tls"
+	"encoding/binary"
 	"encoding/gob"
+	"fmt"
 )
 
 type Message struct {
@@ -11,8 +13,8 @@ type Message struct {
 	From, To         uint64
 	Intermediate     int64
 	FromNode, ToNode uint64
-	AlreadyBeen      []uint64
 	Content          []byte
+	AlreadyBeen      []uint64
 }
 
 const (
@@ -34,9 +36,13 @@ func MessageFromBytes(input []byte) (*Message, error) {
 	msg := &Message{}
 	err := dec.Decode(msg)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("error decoding message: %v", err)
 	}
 	return msg, nil
+}
+
+func ReadSize(bytes []byte) uint32 {
+	return binary.BigEndian.Uint32(bytes[:4])
 }
 
 func (m *Message) Send(conn *tls.Conn) error {
@@ -44,6 +50,7 @@ func (m *Message) Send(conn *tls.Conn) error {
 	if err != nil {
 		return err
 	}
+
 	_, err = conn.Write(msgBytes)
 	if err != nil {
 		return err
@@ -56,7 +63,14 @@ func (m *Message) Bytes() ([]byte, error) {
 	enc := gob.NewEncoder(&buf)
 	err := enc.Encode(m)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("error encoding message: %v", err)
 	}
-	return buf.Bytes(), nil
+	bytes := buf.Bytes()
+
+	headerSize := 4
+	msgSize := len(bytes)
+	header := make([]byte, headerSize)
+	binary.BigEndian.PutUint32(header, uint32(msgSize))
+
+	return append(header, bytes...), nil
 }

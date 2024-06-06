@@ -23,6 +23,7 @@ type TrustClient struct {
 	serverId uint64
 	certs    map[uint64]*x509.Certificate
 	keys     map[uint64][]byte
+	channels []chan []byte
 }
 
 func NewTrustClient(flags *flags.ClientFlags) (*TrustClient, error) {
@@ -47,7 +48,7 @@ func NewTrustClient(flags *flags.ClientFlags) (*TrustClient, error) {
 	return &TrustClient{config: config, flags: flags, certs: make(map[uint64]*x509.Certificate), keys: make(map[uint64][]byte)}, nil
 }
 
-func (c *TrustClient) Connect() error {
+func (c *TrustClient) Connect(bufferSize int) error {
 	conn, err := tls.Dial("tcp", fmt.Sprintf("%s:%s", c.flags.ServerHost, c.flags.ServerPort), c.config)
 	if err != nil {
 		return err
@@ -56,10 +57,16 @@ func (c *TrustClient) Connect() error {
 	c.conn = conn
 
 	v := make(chan uint64)
-	go c.handleConnection(v)
+	go c.handleConnection(v, bufferSize)
 	<-v
 
 	return nil
+}
+
+func (c *TrustClient) Read() chan []byte {
+	ch := make(chan []byte)
+	c.channels = append(c.channels, ch)
+	return ch
 }
 
 func (c *TrustClient) Send(bytes []byte, dest uint64) error {
@@ -95,14 +102,14 @@ func (c *TrustClient) Send(bytes []byte, dest uint64) error {
 
 		key = crypto.GenerateAESKey()
 		c.keys[dest] = key
-		aseKeyEncrypted, err := crypto.EncryptMessage(key, cert)
+		aesKeyEncrypted, err := crypto.EncryptMessage(key, cert)
 		if err != nil {
 			return err
 		}
 
 		msg = &message.Message{
 			Type:         message.AES_KEY,
-			Content:      aseKeyEncrypted,
+			Content:      aesKeyEncrypted,
 			From:         c.clientId,
 			To:           dest,
 			Intermediate: -1,
@@ -135,24 +142,40 @@ func (c *TrustClient) Close() {
 	c.conn.Close()
 }
 
-func (c *TrustClient) handleConnection(v chan uint64) {
+func (c *TrustClient) handleConnection(v chan uint64, bufferSize int) {
 	defer c.Close()
 
 	for {
-		buf := make([]byte, 4096)
-		n, err := c.conn.Read(buf)
-		if err != nil {
-			log.Println(n, err)
-			return
+		size := 0
+		n := 0
+		buf := make([]byte, 0, bufferSize)
+		for {
+			if size != 0 && n >= size {
+				break
+			}
+
+			newBuf := make([]byte, bufferSize)
+			bytesRead, err := c.conn.Read(newBuf)
+			if err != nil {
+				log.Println(n, err)
+				return
+			}
+
+			if size == 0 {
+				size = int(message.ReadSize(newBuf[:4]))
+			}
+
+			buf = append(buf, newBuf...)
+			n += bytesRead
 		}
 
-		msg, err := message.MessageFromBytes(buf[:n])
+		msg, err := message.MessageFromBytes(buf[4:n])
 		if err != nil {
 			log.Println(err)
-			return
+			continue
 		}
 
-		fmt.Println("Received message:", msg.Type, "from", msg.From, "to", msg.To)
+		// fmt.Println("Received message:", msg.Type, "from", msg.From, "to", msg.To)
 		switch msg.Type {
 		case message.PEER_ID:
 			fmt.Println("Received peer ID:", msg.From)
@@ -204,7 +227,10 @@ func (c *TrustClient) handleConnection(v chan uint64) {
 				fmt.Println(err)
 				continue
 			}
-			fmt.Println("Received message from", msg.From, ":", string(decrypted))
+
+			for _, ch := range c.channels {
+				ch <- decrypted
+			}
 		}
 	}
 }

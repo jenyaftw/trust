@@ -6,15 +6,16 @@ import (
 )
 
 type ServerFlags struct {
-	NodeId    int
-	NodeCount int
-	Host      string
-	Port      string
-	Cert      string
-	Key       string
-	Ca        string
-	Timeout   int
-	Peers     string
+	NodeId     int
+	NodeCount  int
+	Host       string
+	Port       string
+	Cert       string
+	Key        string
+	Ca         string
+	Timeout    int
+	Peers      string
+	BufferSize int
 }
 
 type ClientFlags struct {
@@ -22,6 +23,7 @@ type ClientFlags struct {
 	ServerPort string
 	Cert       string
 	Key        string
+	BufferSize int
 }
 
 const (
@@ -39,6 +41,7 @@ func ParseServerFlags() *ServerFlags {
 	key := flag.String("key", "", "Key in Base64")
 	ca := flag.String("ca", "", "CA certificate in Base64")
 	timeout := flag.Int("timeout", 5000, "Timeout for connection")
+	bufferSize := flag.Int("buffer", 64*1024, "Buffer size")
 
 	peers := flag.String("peers", PEERS, "Peers")
 	nodes := flag.Int("nodes", 0, "Number of nodes")
@@ -46,21 +49,23 @@ func ParseServerFlags() *ServerFlags {
 	flag.Parse()
 
 	return &ServerFlags{
-		Host:      *host,
-		Port:      *port,
-		Cert:      *cert,
-		Key:       *key,
-		Ca:        *ca,
-		Peers:     *peers,
-		NodeId:    *nodeId,
-		NodeCount: *nodes,
-		Timeout:   *timeout,
+		Host:       *host,
+		Port:       *port,
+		Cert:       *cert,
+		Key:        *key,
+		Ca:         *ca,
+		Peers:      *peers,
+		NodeId:     *nodeId,
+		NodeCount:  *nodes,
+		Timeout:    *timeout,
+		BufferSize: *bufferSize,
 	}
 }
 
 func ParseClientFlags() *ClientFlags {
 	host := flag.String("host", HOST, "Server host")
 	port := flag.String("port", PORT, "Server port")
+	bufferSize := flag.Int("buffer", 64*1024, "Buffer size")
 
 	cert := flag.String("cert", "certs/client-1.crt", "Certificate")
 	key := flag.String("key", "certs/client-1.key", "Key")
@@ -76,5 +81,6 @@ func ParseClientFlags() *ClientFlags {
 		ServerPort: *port,
 		Cert:       *cert,
 		Key:        *key,
+		BufferSize: *bufferSize,
 	}
 }

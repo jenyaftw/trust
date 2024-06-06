@@ -35,7 +35,7 @@ func ListenServer(flags *flags.ServerFlags, config *tls.Config) {
 	peers := strings.Split(flags.Peers, ",")
 	for _, peer := range peers {
 		if peer != "" {
-			go joinPeer(peer, config, flags.NodeCount)
+			go joinPeer(peer, config, flags.NodeCount, flags.BufferSize)
 		}
 	}
 
@@ -45,18 +45,18 @@ func ListenServer(flags *flags.ServerFlags, config *tls.Config) {
 			log.Println(err)
 			continue
 		}
-		go handleConnection(conn.(*tls.Conn), flags.NodeCount)
+		go handleConnection(conn.(*tls.Conn), flags.NodeCount, flags.BufferSize)
 	}
 }
 
-func joinPeer(peer string, config *tls.Config, nodeCount int) {
+func joinPeer(peer string, config *tls.Config, nodeCount int, bufferSize int) {
 	conn, err := tls.Dial("tcp", peer, config)
 	if err != nil {
 		log.Fatal(err)
 		return
 	}
 
-	go handleConnection(conn, nodeCount)
+	go handleConnection(conn, nodeCount, bufferSize)
 }
 
 func processMessageRelay(msg *message.Message, nodeCount int) uint64 {
@@ -100,7 +100,7 @@ func processMessageRelay(msg *message.Message, nodeCount int) uint64 {
 	return shiftFrom
 }
 
-func handleConnection(conn *tls.Conn, nodeCount int) {
+func handleConnection(conn *tls.Conn, nodeCount int, bufferSize int) {
 	defer conn.Close()
 
 	msg := &message.Message{
@@ -110,17 +110,33 @@ func handleConnection(conn *tls.Conn, nodeCount int) {
 	msg.Send(conn)
 
 	for {
-		buf := make([]byte, 4096)
-		n, err := conn.Read(buf)
-		if err != nil {
-			log.Println(n, err)
-			return
+		size := 0
+		n := 0
+		buf := make([]byte, 0, bufferSize)
+		for {
+			if size != 0 && n >= size {
+				break
+			}
+
+			newBuf := make([]byte, bufferSize)
+			bytesRead, err := conn.Read(newBuf)
+			if err != nil {
+				log.Println(n, err)
+				return
+			}
+
+			if size == 0 {
+				size = int(message.ReadSize(newBuf[:4]))
+			}
+
+			buf = append(buf, newBuf...)
+			n += bytesRead
 		}
 
-		msg, err := message.MessageFromBytes(buf[:n])
+		msg, err := message.MessageFromBytes(buf[4:n])
 		if err != nil {
 			log.Println(err)
-			return
+			continue
 		}
 
 		fmt.Println("Received message:", msg.Type, "from", msg.From, "to", msg.To)

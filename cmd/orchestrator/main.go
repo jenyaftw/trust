@@ -43,7 +43,7 @@ func createAndSaveCertificate(id int, caCert *x509.Certificate, caKey *rsa.Priva
 	return nil
 }
 
-func launchNode(id int, serial int, first *structs.TreeNode, second *structs.TreeNode, caCert *x509.Certificate, caKey *rsa.PrivateKey, caCertStr string, timeout int, debug bool) {
+func launchNode(id int, serial int, first *structs.TreeNode, second *structs.TreeNode, caCert *x509.Certificate, caKey *rsa.PrivateKey, caCertStr string, timeout int, debug bool, bufferSize int) {
 	node := structs.Nodes[id]
 	node.Status = 1
 
@@ -85,7 +85,7 @@ func launchNode(id int, serial int, first *structs.TreeNode, second *structs.Tre
 	peersString := strings.Join(peers, ",")
 
 	node.Status = 2
-	cmd := exec.Command("go", "run", "cmd/server/main.go", "-cert", certStr, "-key", keyStr, "-ca", caCertStr, "-port", fmt.Sprint(node.Port), "-host", node.IP, "-peers", peersString, "-id", fmt.Sprint(id), "-timeout", fmt.Sprint(timeout), "-nodes", fmt.Sprint(len(structs.Nodes)))
+	cmd := exec.Command("go", "run", "cmd/server/main.go", "-cert", certStr, "-key", keyStr, "-ca", caCertStr, "-port", fmt.Sprint(node.Port), "-host", node.IP, "-peers", peersString, "-id", fmt.Sprint(id), "-timeout", fmt.Sprint(timeout), "-buffer", fmt.Sprint(bufferSize), "-nodes", fmt.Sprint(len(structs.Nodes)))
 
 	if debug {
 		cmd.Stdout = os.Stdout
@@ -95,11 +95,11 @@ func launchNode(id int, serial int, first *structs.TreeNode, second *structs.Tre
 	if err := cmd.Run(); err != nil {
 		node.Status = 0
 		errors += 1
-		launchNode(id, serial, first, second, caCert, caKey, caCertStr, timeout, debug)
+		launchNode(id, serial, first, second, caCert, caKey, caCertStr, timeout, debug, bufferSize)
 	}
 }
 
-func startNodes(minPort int, first *structs.TreeNode, second *structs.TreeNode, timeout int, debug bool) {
+func startNodes(minPort int, first *structs.TreeNode, second *structs.TreeNode, timeout int, debug bool, bufferSize int) {
 	caKey, err := crypto.GenerateRSAKey(RSAKeySize)
 	if err != nil {
 		log.Println(err)
@@ -119,7 +119,7 @@ func startNodes(minPort int, first *structs.TreeNode, second *structs.TreeNode, 
 
 	serial := minPort
 	for i := 0; i < len(structs.Nodes); i++ {
-		go launchNode(i, serial, first, second, caCert, caKey, caCertStr, timeout, debug)
+		go launchNode(i, serial, first, second, caCert, caKey, caCertStr, timeout, debug, bufferSize)
 
 		serial++
 	}
@@ -130,6 +130,7 @@ func main() {
 	minPort := flag.Int("p", MinPort, "Мінімальний порт")
 	timeout := flag.Int("t", Timeout, "Таймаут для під'єднання вузлів (у мс)")
 	debug := flag.Bool("d", false, "Режим дебагу")
+	bufferSize := flag.Int("b", 64*1024, "Розмір буфера")
 	flag.Parse()
 
 	for i := 0; i < *nodes; i++ {
@@ -147,7 +148,7 @@ func main() {
 	firstTree.FillDeBruijn(*nodes-1, 0)
 	secondTree.FillDeBruijn(*nodes-1, 0)
 
-	go startNodes(*minPort, &firstTree, &secondTree, *timeout, *debug)
+	go startNodes(*minPort, &firstTree, &secondTree, *timeout, *debug, *bufferSize)
 
 	if *debug {
 		for {

@@ -2,9 +2,11 @@ package main
 
 import (
 	"bufio"
+	"crypto/rand"
 	"fmt"
 	"log"
 	"os"
+	"time"
 
 	"github.com/jenyaftw/trust/internal/app"
 	"github.com/jenyaftw/trust/internal/pkg/flags"
@@ -19,7 +21,7 @@ func main() {
 		return
 	}
 
-	err = client.Connect()
+	err = client.Connect(flags.BufferSize)
 	if err != nil {
 		log.Println(err)
 		return
@@ -27,7 +29,7 @@ func main() {
 
 	fmt.Println("Connected to server")
 	for {
-		fmt.Print("Select message type (1 - text): ")
+		fmt.Print("Select message type (1 - text, 2 - benchmark): ")
 		var msg int
 		_, err := fmt.Scanf("%d\n", &msg)
 		if err != nil {
@@ -35,17 +37,19 @@ func main() {
 			return
 		}
 
-		if msg != 1 {
+		if msg != 1 && msg != 2 {
 			fmt.Println("Invalid message type")
 			continue
 		}
 
-		fmt.Print("Enter destination ID: ")
 		var dest uint64
-		_, err = fmt.Scanf("%d\n", &dest)
-		if err != nil {
-			log.Println(err)
-			return
+		if msg == 1 {
+			fmt.Print("Enter destination ID: ")
+			_, err = fmt.Scanf("%d\n", &dest)
+			if err != nil {
+				log.Println(err)
+				return
+			}
 		}
 
 		switch msg {
@@ -58,6 +62,66 @@ func main() {
 			if err != nil {
 				log.Println(err)
 				return
+			}
+		case 2:
+			fmt.Print("Receive = 0, send = 1: ")
+			var recv uint64
+			_, err = fmt.Scanf("%d\n", &recv)
+			if err != nil {
+				log.Println(err)
+				return
+			}
+
+			switch recv {
+			case 1:
+				fmt.Print("Enter destination ID: ")
+				_, err = fmt.Scanf("%d\n", &dest)
+				if err != nil {
+					log.Println(err)
+					return
+				}
+
+				bytes := make([]byte, flags.BufferSize-256)
+				_, err := rand.Read(bytes)
+				if err != nil {
+					log.Println(err)
+					return
+				}
+
+				for {
+					err = client.Send(bytes, dest)
+					if err != nil {
+						log.Println("rip", err)
+						return
+					}
+				}
+			case 0:
+				read := client.Read()
+				bytesReceived := 0
+				start := time.Now().UnixMilli()
+
+				fileName := fmt.Sprintf("received_%d.csv", time.Now().Unix())
+				file, err := os.Create(fileName)
+				if err != nil {
+					log.Println(err)
+					return
+				}
+				defer file.Close()
+
+				for {
+					data := <-read
+					bytesReceived += len(data)
+					if time.Now().UnixMilli()-start > 1000 {
+						fmt.Printf("%d Bytes per second\n", bytesReceived)
+						_, err := file.WriteString(fmt.Sprintf("%d\n", bytesReceived))
+						if err != nil {
+							log.Println(err)
+							return
+						}
+						start = time.Now().UnixMilli()
+						bytesReceived = 0
+					}
+				}
 			}
 		}
 	}
