@@ -1,8 +1,10 @@
 package structs
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"crypto/x509"
+	"encoding/gob"
 	"fmt"
 	"strings"
 	"time"
@@ -130,19 +132,38 @@ type Block struct {
 	Timestamp  int64
 	MerkleRoot []byte
 	Data       []byte
-	Hash       []byte
 	PrevHash   []byte
 }
 
 func (b *Block) CalculateHash() []byte {
-	record := fmt.Sprint(b.ID) + fmt.Sprint(b.Timestamp) + string(b.Data) + string(b.PrevHash)
 	hash := sha256.New()
-	// hash.Write(b.Data)
-	// hash.Write(b.PrevHash)
-	// hash.Write([]byte(string(b.ID)))
-	// hash.Write([]byte(string(b.Timestamp)))
-	hash.Write([]byte(record))
+	hash.Write(b.Data)
+	hash.Write(b.PrevHash)
+	hash.Write([]byte(fmt.Sprint(b.ID)))
+	hash.Write([]byte(fmt.Sprint(b.Timestamp)))
 	return hash.Sum(nil)
+}
+
+func (b *Block) Bytes() ([]byte, error) {
+	var buf bytes.Buffer
+	enc := gob.NewEncoder(&buf)
+	err := enc.Encode(b)
+	if err != nil {
+		return nil, fmt.Errorf("error encoding message: %v", err)
+	}
+
+	return buf.Bytes(), nil
+}
+
+func DecodeBlock(data []byte) (*Block, error) {
+	var block Block
+	dec := gob.NewDecoder(bytes.NewReader(data))
+	err := dec.Decode(&block)
+	if err != nil {
+		return nil, fmt.Errorf("error decoding block: %v", err)
+	}
+
+	return &block, nil
 }
 
 type Blockchain struct {
@@ -152,30 +173,42 @@ type Blockchain struct {
 func NewBlockchain() *Blockchain {
 	genesisBlock := &Block{
 		ID:        0,
-		Timestamp: time.Now().Unix(),
+		Timestamp: 1111111111,
 		Data:      []byte("Genesis block"),
 		PrevHash:  nil,
 	}
 
 	genesisHash := genesisBlock.CalculateHash()
-	genesisBlock.Hash = genesisHash
+	genesisBlock.MerkleRoot = genesisHash
 
-	return &Blockchain{
+	blockchain := &Blockchain{
 		Blocks: []*Block{genesisBlock},
 	}
+
+	return blockchain
 }
 
-func (bc *Blockchain) AddBlock(data []byte) {
+func (bc *Blockchain) AddBlock(block *Block) *Block {
+	prevBlock := bc.Blocks[len(bc.Blocks)-1]
+	block.PrevHash = prevBlock.MerkleRoot
+	block.ID = prevBlock.ID + 1
+	block.Timestamp = time.Now().Unix()
+
+	bc.Blocks = append(bc.Blocks, block)
+	return block
+}
+
+func (bc *Blockchain) AddBlockFromBytes(data []byte) *Block {
 	prevBlock := bc.Blocks[len(bc.Blocks)-1]
 	newBlock := &Block{
 		ID:        prevBlock.ID + 1,
 		Timestamp: time.Now().Unix(),
 		Data:      data,
-		PrevHash:  prevBlock.Hash,
+		PrevHash:  prevBlock.MerkleRoot,
 	}
 
-	newBlock.Hash = newBlock.CalculateHash()
 	bc.Blocks = append(bc.Blocks, newBlock)
+	return newBlock
 }
 
 func (bc *Blockchain) Validate() bool {
@@ -183,13 +216,103 @@ func (bc *Blockchain) Validate() bool {
 		currentBlock := bc.Blocks[i]
 		prevBlock := bc.Blocks[i-1]
 
-		if string(currentBlock.PrevHash) != string(prevBlock.Hash) {
+		if string(currentBlock.PrevHash) != string(prevBlock.MerkleRoot) {
 			return false
 		}
 
-		if string(currentBlock.Hash) != string(currentBlock.CalculateHash()) {
+		if string(currentBlock.MerkleRoot) != string(currentBlock.CalculateHash()) {
 			return false
 		}
 	}
 	return true
+}
+
+type MerkleNode struct {
+	Left    *MerkleNode
+	Right   *MerkleNode
+	Value   []byte
+	Content *Block
+}
+
+type MerkleTree struct {
+	Root *MerkleNode
+}
+
+func BuildTreeFromBlockchain(bc *Blockchain) *MerkleTree {
+	leaves := make([]*MerkleNode, 0)
+	for _, block := range bc.Blocks {
+		leaves = append(leaves, &MerkleNode{Value: block.CalculateHash(), Content: block})
+	}
+
+	if len(leaves)%2 != 0 {
+		leaves = append(leaves, leaves[len(leaves)-1])
+	}
+
+	return &MerkleTree{
+		Root: BuildTreeRecursively(leaves),
+	}
+}
+
+func BuildTreeRecursively(nodes []*MerkleNode) *MerkleNode {
+	if len(nodes)%2 == 1 {
+		nodes = append(nodes, nodes[len(nodes)-1])
+	}
+	half := len(nodes) / 2
+
+	if len(nodes) == 2 {
+		hash := sha256.New()
+		hash.Write(nodes[0].Value)
+		hash.Write(nodes[1].Value)
+
+		return &MerkleNode{
+			Left:  nodes[0],
+			Right: nodes[1],
+			Value: hash.Sum(nil),
+		}
+	}
+
+	left := BuildTreeRecursively(nodes[:half])
+	right := BuildTreeRecursively(nodes[half:])
+
+	hash := sha256.New()
+	hash.Write(left.Value)
+	hash.Write(right.Value)
+
+	return &MerkleNode{
+		Left:  left,
+		Right: right,
+		Value: hash.Sum(nil),
+	}
+}
+
+func (mt *MerkleTree) AddBlock(block *Block) {
+	newNode := &MerkleNode{
+		Value:   block.CalculateHash(),
+		Content: block,
+	}
+
+	if mt.Root == nil {
+		mt.Root = newNode
+		return
+	}
+
+	mt.Root = mt.AddNodeRecursively(newNode)
+}
+
+func (mt *MerkleTree) AddNodeRecursively(node *MerkleNode) *MerkleNode {
+	if mt.Root == nil {
+		return node
+	}
+
+	hash := sha256.New()
+	hash.Write(mt.Root.Value)
+	hash.Write(node.Value)
+
+	newNode := &MerkleNode{
+		Left:  mt.Root,
+		Right: node,
+		Value: hash.Sum(nil),
+	}
+
+	return mt.AddNodeRecursively(newNode)
 }

@@ -1,6 +1,7 @@
 package app
 
 import (
+	"bytes"
 	"crypto/rsa"
 	"crypto/tls"
 	"crypto/x509"
@@ -13,17 +14,20 @@ import (
 	"github.com/jenyaftw/trust/internal/pkg/crypto"
 	"github.com/jenyaftw/trust/internal/pkg/flags"
 	"github.com/jenyaftw/trust/internal/pkg/message"
+	"github.com/jenyaftw/trust/internal/pkg/structs"
 )
 
 type TrustClient struct {
-	flags    *flags.ClientFlags
-	config   *tls.Config
-	conn     *tls.Conn
-	clientId uint64
-	serverId uint64
-	certs    map[uint64]*x509.Certificate
-	keys     map[uint64][]byte
-	channels []chan []byte
+	flags              *flags.ClientFlags
+	config             *tls.Config
+	conn               *tls.Conn
+	clientId           uint64
+	serverId           uint64
+	certs              map[uint64]*x509.Certificate
+	keys               map[uint64][]byte
+	channels           []chan []byte
+	blockchains        map[uint64]*structs.Blockchain
+	validateBlockchain bool
 }
 
 func NewTrustClient(flags *flags.ClientFlags) (*TrustClient, error) {
@@ -45,7 +49,7 @@ func NewTrustClient(flags *flags.ClientFlags) (*TrustClient, error) {
 		return nil, err
 	}
 
-	return &TrustClient{config: config, flags: flags, certs: make(map[uint64]*x509.Certificate), keys: make(map[uint64][]byte)}, nil
+	return &TrustClient{config: config, flags: flags, validateBlockchain: flags.ValidateBlockchain, certs: make(map[uint64]*x509.Certificate), keys: make(map[uint64][]byte), blockchains: make(map[uint64]*structs.Blockchain)}, nil
 }
 
 func (c *TrustClient) Connect(bufferSize int) error {
@@ -72,6 +76,13 @@ func (c *TrustClient) Read() chan []byte {
 func (c *TrustClient) Send(bytes []byte, dest uint64) error {
 	cert := c.certs[dest]
 	key := c.keys[dest]
+	blockchain := c.blockchains[dest]
+
+	if blockchain == nil {
+		blockchain = structs.NewBlockchain()
+		c.blockchains[dest] = blockchain
+	}
+
 	if cert == nil {
 		msg := &message.Message{
 			Type:         message.GET_CLIENT_CERT,
@@ -122,7 +133,22 @@ func (c *TrustClient) Send(bytes []byte, dest uint64) error {
 		}
 	}
 
-	encrypted, err := crypto.EncryptMessageAES(bytes, key)
+	bytesToSend := bytes
+
+	if c.validateBlockchain {
+		block := blockchain.AddBlockFromBytes(bytes)
+		tree := structs.BuildTreeFromBlockchain(blockchain)
+		block.MerkleRoot = tree.Root.Value
+		fmt.Println("Merkle root:", block.MerkleRoot)
+
+		bytes, err := block.Bytes()
+		if err != nil {
+			return err
+		}
+		bytesToSend = bytes
+	}
+
+	encrypted, err := crypto.EncryptMessageAES(bytesToSend, key)
 	if err != nil {
 		return err
 	}
@@ -175,7 +201,6 @@ func (c *TrustClient) handleConnection(v chan uint64, bufferSize int) {
 			continue
 		}
 
-		// fmt.Println("Received message:", msg.Type, "from", msg.From, "to", msg.To)
 		switch msg.Type {
 		case message.PEER_ID:
 			fmt.Println("Received peer ID:", msg.From)
@@ -221,11 +246,29 @@ func (c *TrustClient) handleConnection(v chan uint64, bufferSize int) {
 				continue
 			}
 			c.keys[msg.From] = aesKey
+			c.blockchains[msg.From] = structs.NewBlockchain()
 		case message.DATA:
 			decrypted, err := crypto.DecryptMessageAES(msg.Content, c.keys[msg.From])
 			if err != nil {
 				fmt.Println(err)
 				continue
+			}
+
+			if c.validateBlockchain {
+				block, err := structs.DecodeBlock(decrypted)
+				if err != nil {
+					fmt.Println(err)
+					continue
+				}
+
+				blockchain := c.blockchains[msg.From]
+				blockchain.AddBlock(block)
+
+				tree := structs.BuildTreeFromBlockchain(blockchain)
+				if !bytes.Equal(tree.Root.Value, block.MerkleRoot) {
+					fmt.Println("Merkle root mismatch")
+					continue
+				}
 			}
 
 			for _, ch := range c.channels {

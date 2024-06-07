@@ -19,11 +19,12 @@ type ServerFlags struct {
 }
 
 type ClientFlags struct {
-	ServerHost string
-	ServerPort string
-	Cert       string
-	Key        string
-	BufferSize int
+	ServerHost         string
+	ServerPort         string
+	Cert               string
+	Key                string
+	BufferSize         int
+	ValidateBlockchain bool
 }
 
 const (
@@ -69,6 +70,7 @@ func ParseClientFlags() *ClientFlags {
 
 	cert := flag.String("cert", "certs/client-1.crt", "Certificate")
 	key := flag.String("key", "certs/client-1.key", "Key")
+	validate := flag.Bool("validate", false, "Validate received data with the blockchain")
 
 	if *cert == "" || *key == "" {
 		log.Fatal("Certificate and key are required")
@@ -77,10 +79,11 @@ func ParseClientFlags() *ClientFlags {
 	flag.Parse()
 
 	return &ClientFlags{
-		ServerHost: *host,
-		ServerPort: *port,
-		Cert:       *cert,
-		Key:        *key,
-		BufferSize: *bufferSize,
+		ServerHost:         *host,
+		ServerPort:         *port,
+		Cert:               *cert,
+		Key:                *key,
+		BufferSize:         *bufferSize,
+		ValidateBlockchain: *validate,
 	}
 }

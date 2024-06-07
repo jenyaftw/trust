@@ -10,6 +10,7 @@ import (
 
 	"github.com/jenyaftw/trust/internal/app"
 	"github.com/jenyaftw/trust/internal/pkg/flags"
+	"github.com/jenyaftw/trust/internal/pkg/structs"
 )
 
 func main() {
@@ -29,7 +30,7 @@ func main() {
 
 	fmt.Println("Connected to server")
 	for {
-		fmt.Print("Select message type (1 - text, 2 - benchmark): ")
+		fmt.Print("Select message type (1 - text, 2 - benchmark, 3 - receive text): ")
 		var msg int
 		_, err := fmt.Scanf("%d\n", &msg)
 		if err != nil {
@@ -37,7 +38,7 @@ func main() {
 			return
 		}
 
-		if msg != 1 && msg != 2 {
+		if msg != 1 && msg != 2 && msg != 3 {
 			fmt.Println("Invalid message type")
 			continue
 		}
@@ -122,6 +123,17 @@ func main() {
 						bytesReceived = 0
 					}
 				}
+			}
+		case 3:
+			read := client.Read()
+			for {
+				data := <-read
+				block, err := structs.DecodeBlock(data)
+				if err != nil {
+					log.Println(err)
+					continue
+				}
+				fmt.Println(string(block.Data))
 			}
 		}
 	}
